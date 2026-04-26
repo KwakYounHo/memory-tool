@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use std::path::PathBuf;
 
-use memory_rag_poc::{
+use memory_tool::{
     indexer::{index_files, IndexOptions},
     storage::{open, Scope},
 };
