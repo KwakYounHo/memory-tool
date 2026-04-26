@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use text_splitter::{ChunkConfig, MarkdownSplitter};
 
-use crate::storage::{insert_chunk, InsertOutcome, NewChunk, Scope};
+use crate::storage::{insert_chunk, InsertOutcome, Kind, NewChunk, Scope};
 
 const MIN_CHUNK_CHARS: usize = 50;
 const CHUNK_SIZE: usize = 800;
@@ -27,6 +27,7 @@ pub struct IndexOptions<'a> {
     pub project: Option<&'a str>,
     pub machine: Option<&'a str>,
     pub scope: Scope,
+    pub kind: Kind
 }
 
 pub async fn index_files<P: AsRef<Path>>(
@@ -64,6 +65,7 @@ pub async fn index_files<P: AsRef<Path>>(
                     project: options.project,
                     machine: options.machine,
                     scope: options.scope,
+                    kind: options.kind,
                     source_mtime: mtime,
                     embed_model: options.embed_model,
                 };

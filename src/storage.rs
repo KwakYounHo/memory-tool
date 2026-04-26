@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS chunks (
 
     project             TEXT,
     machine             TEXT,
-    scope               TEXT    NOT NULL DEFAULT 'project',
+    scope               TEXT    NOT NULL DEFAULT 'agent',
+    kind                TEXT    NOT NULL DEFAULT 'note',
 
     source_mtime        INTEGER,
     indexed_at          INTEGER NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS chunks (
 CREATE INDEX IF NOT EXISTS  idx_chunks_source   ON chunks(source);
 CREATE INDEX IF NOT EXISTS  idx_chunks_project  ON chunks(project);
 CREATE INDEX IF NOT EXISTS  idx_chunks_scope    ON chunks(scope);
+CREATE INDEX IF NOT EXISTS  idx_chunks_kind     ON chunks(kind);
 CREATE INDEX IF NOT EXISTS  idx_chunks_active
     ON chunks(superseded_by) WHERE superseded_by IS NULL;
 
@@ -68,17 +70,38 @@ fn register_vec_extension() {
 pub const EMBED_DIM: usize = 768;
 #[derive(Debug, Clone, Copy)]
 pub enum Scope {
-    Project,
+    Agent,
     User,
-    Global,
 }
 
 impl Scope {
     fn as_str(self) -> &'static str {
         match self {
-            Self::Project => "project",
+            Self::Agent => "agent",
             Self::User => "user",
-            Self::Global => "global",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Kind {
+    Rule,
+    Feedback,
+    Reflection,
+    Reference,
+    Memory,
+    Note,
+}
+
+impl Kind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Rule => "rule",
+            Self::Feedback => "feedback",
+            Self::Reflection => "reflection",
+            Self::Reference => "reference",
+            Self::Memory => "memory",
+            Self::Note => "note",
         }
     }
 }
@@ -91,6 +114,7 @@ pub struct NewChunk<'a> {
     pub project: Option<&'a str>,
     pub machine: Option<&'a str>,
     pub scope: Scope,
+    pub kind: Kind,
     pub source_mtime: Option<i64>,
     pub embed_model: &'a str,
 }
@@ -118,10 +142,10 @@ pub fn insert_chunk(conn: &mut Connection, new: NewChunk) -> Result<InsertOutcom
         .query_row(
             "INSERT OR IGNORE INTO chunks(
                 source, text, text_hash,
-                project, machine, scope,
+                project, machine, scope, kind,
                 source_mtime, indexed_at,
                 embed_model, embed_dim
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id",
             rusqlite::params![
             new.source,
@@ -130,6 +154,7 @@ pub fn insert_chunk(conn: &mut Connection, new: NewChunk) -> Result<InsertOutcom
             new.project,
             new.machine,
             new.scope.as_str(),
+            new.kind.as_str(),
             new.source_mtime,
             now,
             new.embed_model,
@@ -183,12 +208,14 @@ pub struct SearchHit {
     pub project: Option<String>,
     pub machine: Option<String>,
     pub scope: String,
+    pub kind: String,
     pub distance: f32,
 }
 
 #[derive(Debug, Default)]
 pub struct SearchFilter<'a> {
     pub scope: Option<&'a [Scope]>,
+    pub kind: Option<&'a [Kind]>,
     pub project: Option<&'a str>,
     pub machine: Option<&'a str>,
     pub source_prefix: Option<&'a str>,
@@ -209,7 +236,7 @@ pub fn search(
     }
 
     let mut sql = String::from(
-        "SELECT c.id, c.source, c.text, c.project, c.machine, c.scope, distance
+        "SELECT c.id, c.source, c.text, c.project, c.machine, c.scope, c.kind, distance
         FROM vec_chunks v
         JOIN chunks c ON c.id = v.rowid
         WHERE v.embedding MATCH ?
@@ -229,6 +256,15 @@ pub fn search(
             sql.push_str(&format!("\tAND c.scope IN ({})", qs.join(",")));
             for s in scopes {
                 params.push(Box::new(s.as_str().to_string()));
+            }
+        }
+    }
+    if let Some(kinds) = filter.kind {
+        if !kinds.is_empty() {
+            let qs: Vec<&str> = kinds.iter().map(|_| "?").collect();
+            sql.push_str(&format!("\tAND c.kind IN ({})", qs.join(",")));
+            for k in kinds {
+                params.push(Box::new(k.as_str().to_string()));
             }
         }
     }
@@ -260,7 +296,8 @@ pub fn search(
                 project: row.get(3)?,
                 machine: row.get(4)?,
                 scope: row.get(5)?,
-                distance: row.get(6)?,
+                kind: row.get(6)?,
+                distance: row.get(7)?,
             })
         })?
     .collect::<Result<Vec<_>, _>>()?;
@@ -271,6 +308,7 @@ pub fn search(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::EMBED_MODEL;
 
     #[test]
     fn opens_and_loads_vec() -> Result<()> {
@@ -298,9 +336,10 @@ mod tests {
             embedding: &embedding,
             project: Some("test"),
             machine: None,
-            scope: Scope::Project,
+            scope: Scope::Agent,
+            kind: Kind::Note,
             source_mtime: None,
-            embed_model: "embeddinggemma:300m-qat-q4_0",
+            embed_model: EMBED_MODEL,
         };
 
         let first = insert_chunk(&mut conn, chunk)?;
@@ -329,7 +368,8 @@ mod tests {
             embedding: &bad,
             project: None,
             machine: None,
-            scope: Scope::Project,
+            scope: Scope::Agent,
+            kind: Kind::Note,
             source_mtime: None,
             embed_model: "test",
         };
@@ -348,7 +388,7 @@ mod tests {
             source: "/tmp/test.md", text: "first chunk text",
             embedding: &embedding,
             project: None, machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         };
 
@@ -375,14 +415,14 @@ mod tests {
             source: "/a.md", text: "alpha",
             embedding: &e_alpha,
             project: None, machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         })?;
         insert_chunk(&mut conn, NewChunk {
             source: "/b.md", text: "beta",
             embedding: &e_beta,
             project: None, machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         })?;
 
@@ -402,14 +442,14 @@ mod tests {
             source: "/a.md", text: "in proj-a",
             embedding: &e,
             project: Some("proj-a"), machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         })?;
         insert_chunk(&mut conn, NewChunk {
             source: "/b.md", text: "in proj-a",
             embedding: &e,
             project: Some("proj-b"), machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         })?;
 
@@ -431,7 +471,7 @@ mod tests {
             source: "a.md", text: "old",
             embedding: &e,
             project: None, machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         })? {
             InsertOutcome::Inserted { id } => id,
@@ -441,7 +481,7 @@ mod tests {
             source: "b.md", text: "new",
             embedding: &e,
             project: None, machine: None,
-            scope: Scope::Project, source_mtime: None,
+            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
             embed_model: "test",
         }) ? {
             InsertOutcome::Inserted { id } => id,

@@ -1,13 +1,12 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use std::path::PathBuf;
+use memory_tool::model::EMBED_MODEL;
 
 use memory_tool::{
     indexer::{index_files, IndexOptions},
-    storage::{open, Scope},
+    storage::{open, Kind, Scope},
 };
-
-const EMBED_MODEL: &str = "embeddinggemma:300m-qat-q4_0";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,7 +27,8 @@ async fn main() -> Result<()> {
         embed_model: EMBED_MODEL,
         project: None,
         machine: None,
-        scope: Scope::Project,
+        scope: Scope::Agent,
+        kind: Kind::Note,
     };
 
     let stats = index_files(&mut conn, &paths, &client, &opts).await?;
