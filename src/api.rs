@@ -15,6 +15,12 @@ use crate::indexer::embed_batch;
 use crate::search::embed_query;
 use crate::storage::{insert_chunk, InsertOutcome, Kind, NewChunk, Scope, SearchFilter, SearchHit};
 
+fn normalize_double_escapes(s: &str) -> String {
+    s.replace("\\n", "\n")
+        .replace("\\t", "\t")
+        .replace("\\r", "\r")
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Mutex<Connection>>,
@@ -131,7 +137,12 @@ pub async fn add_handler(
     State(state): State<AppState>,
     Json(req): Json<AddRequest>,
 ) -> Result<Json<AddResponse>, ApiError> {
-    let embeddings = embed_batch(&state.client, &state.embed_model, &[req.text.as_str()])
+    // Normalize JSON-in-JSON double-escape patterns (small models sometimes
+    // emit "\\n" instead of "\n" in tool arguments, which then end up as
+    // literal "\n" in the stored text).
+    let text = normalize_double_escapes(&req.text);
+
+    let embeddings = embed_batch(&state.client, &state.embed_model, &[text.as_str()])
         .await?;
     let embedding = embeddings.into_iter().next()
         .context("empty embeddings from Ollama")?;
@@ -152,7 +163,7 @@ pub async fn add_handler(
     let mut conn = state.db.lock().await;
     let outcome = insert_chunk(&mut conn, NewChunk {
         source: &req.source,
-        text: &req.text,
+        text: &text,
         embedding: &embedding,
         project: req.project.as_deref(),
         machine: req.machine.as_deref(),
