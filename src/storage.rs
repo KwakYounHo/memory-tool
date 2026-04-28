@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
-use rusqlite::{ffi::sqlite3_auto_extension, Connection};
+use rusqlite::OptionalExtension;
+use rusqlite::{Connection, ffi::sqlite3_auto_extension};
+use sha2::{Digest, Sha256};
 use sqlite_vec::sqlite3_vec_init;
 use std::path::Path;
 use std::sync::Once;
-use rusqlite::OptionalExtension;
-use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const SCHEMA: &str = r#"
@@ -46,8 +46,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
 
 pub fn open(path: impl AsRef<Path>) -> Result<Connection> {
     register_vec_extension();
-    let conn = Connection::open(&path)
-        .with_context(|| format!("open db: {}", path.as_ref().display()))?;
+    let conn =
+        Connection::open(&path).with_context(|| format!("open db: {}", path.as_ref().display()))?;
 
     // FK는 SQLite 기본 OFF, supersession 무결성을 위해 명시적으로 켬.
     conn.pragma_update(None, "foreign_keys", "ON")?;
@@ -61,9 +61,7 @@ pub fn open(path: impl AsRef<Path>) -> Result<Connection> {
 fn register_vec_extension() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute(
-                    sqlite3_vec_init as *const (),
-        )));
+        sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
     });
 }
 
@@ -150,21 +148,21 @@ pub fn insert_chunk(conn: &mut Connection, new: NewChunk) -> Result<InsertOutcom
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id",
             rusqlite::params![
-            new.source,
-            new.text,
-            text_hash,
-            new.project,
-            new.machine,
-            new.scope.as_str(),
-            new.kind.as_str(),
-            new.source_mtime,
-            now,
-            new.embed_model,
-            EMBED_DIM as i64,
+                new.source,
+                new.text,
+                text_hash,
+                new.project,
+                new.machine,
+                new.scope.as_str(),
+                new.kind.as_str(),
+                new.source_mtime,
+                now,
+                new.embed_model,
+                EMBED_DIM as i64,
             ],
             |row| row.get(0),
-            )
-                .optional()?;
+        )
+        .optional()?;
 
     let outcome = match inserted_id {
         Some(id) => {
@@ -174,7 +172,7 @@ pub fn insert_chunk(conn: &mut Connection, new: NewChunk) -> Result<InsertOutcom
                 rusqlite::params![id, bytes],
             )?;
             InsertOutcome::Inserted { id }
-        },
+        }
         None => {
             let existing: i64 = tx.query_row(
                 "SELECT id FROM chunks WHERE source = ? AND text_hash = ?",
@@ -247,10 +245,8 @@ pub fn search(
     );
 
     let query_bytes: Vec<u8> = bytemuck::cast_slice(query_embedding).to_vec();
-    let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![
-        Box::new(query_bytes),
-        Box::new(top_k as i64),
-    ];
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> =
+        vec![Box::new(query_bytes), Box::new(top_k as i64)];
 
     if let Some(scopes) = filter.scope {
         if !scopes.is_empty() {
@@ -286,8 +282,7 @@ pub fn search(
     sql.push_str("\tORDER BY distance");
 
     let mut stmt = conn.prepare(&sql)?;
-    let param_refs: Vec<&dyn rusqlite::ToSql> =
-        params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     let hits = stmt
         .query_map(param_refs.as_slice(), |row| {
@@ -302,7 +297,7 @@ pub fn search(
                 distance: row.get(7)?,
             })
         })?
-    .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(hits)
 }
@@ -387,14 +382,21 @@ mod tests {
         let embedding = vec![0.1f32; EMBED_DIM];
 
         let a = NewChunk {
-            source: "/tmp/test.md", text: "first chunk text",
+            source: "/tmp/test.md",
+            text: "first chunk text",
             embedding: &embedding,
-            project: None, machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
+            project: None,
+            machine: None,
+            scope: Scope::Agent,
+            kind: Kind::Note,
+            source_mtime: None,
             embed_model: "test",
         };
 
-        let b = NewChunk { text: "second chunk text", ..a };
+        let b = NewChunk {
+            text: "second chunk text",
+            ..a
+        };
 
         let r1 = insert_chunk(&mut conn, a)?;
         let r2 = insert_chunk(&mut conn, b)?;
@@ -413,20 +415,34 @@ mod tests {
         let mut e_beta = vec![0.0f32; EMBED_DIM];
         e_beta[1] = 1.0;
 
-        insert_chunk(&mut conn, NewChunk {
-            source: "/a.md", text: "alpha",
-            embedding: &e_alpha,
-            project: None, machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
-            embed_model: "test",
-        })?;
-        insert_chunk(&mut conn, NewChunk {
-            source: "/b.md", text: "beta",
-            embedding: &e_beta,
-            project: None, machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
-            embed_model: "test",
-        })?;
+        insert_chunk(
+            &mut conn,
+            NewChunk {
+                source: "/a.md",
+                text: "alpha",
+                embedding: &e_alpha,
+                project: None,
+                machine: None,
+                scope: Scope::Agent,
+                kind: Kind::Note,
+                source_mtime: None,
+                embed_model: "test",
+            },
+        )?;
+        insert_chunk(
+            &mut conn,
+            NewChunk {
+                source: "/b.md",
+                text: "beta",
+                embedding: &e_beta,
+                project: None,
+                machine: None,
+                scope: Scope::Agent,
+                kind: Kind::Note,
+                source_mtime: None,
+                embed_model: "test",
+            },
+        )?;
 
         let hits = search(&conn, &e_alpha, 2, &SearchFilter::default())?;
         assert_eq!(hits.len(), 2);
@@ -440,25 +456,44 @@ mod tests {
         let mut conn = open(":memory:")?;
         let e = vec![0.5f32; EMBED_DIM];
 
-        insert_chunk(&mut conn, NewChunk {
-            source: "/a.md", text: "in proj-a",
-            embedding: &e,
-            project: Some("proj-a"), machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
-            embed_model: "test",
-        })?;
-        insert_chunk(&mut conn, NewChunk {
-            source: "/b.md", text: "in proj-a",
-            embedding: &e,
-            project: Some("proj-b"), machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
-            embed_model: "test",
-        })?;
+        insert_chunk(
+            &mut conn,
+            NewChunk {
+                source: "/a.md",
+                text: "in proj-a",
+                embedding: &e,
+                project: Some("proj-a"),
+                machine: None,
+                scope: Scope::Agent,
+                kind: Kind::Note,
+                source_mtime: None,
+                embed_model: "test",
+            },
+        )?;
+        insert_chunk(
+            &mut conn,
+            NewChunk {
+                source: "/b.md",
+                text: "in proj-a",
+                embedding: &e,
+                project: Some("proj-b"),
+                machine: None,
+                scope: Scope::Agent,
+                kind: Kind::Note,
+                source_mtime: None,
+                embed_model: "test",
+            },
+        )?;
 
-        let hits = search(&conn, &e, 5, &SearchFilter {
-            project: Some("proj-a"),
-            ..Default::default()
-        })?;
+        let hits = search(
+            &conn,
+            &e,
+            5,
+            &SearchFilter {
+                project: Some("proj-a"),
+                ..Default::default()
+            },
+        )?;
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].text, "in proj-a");
         Ok(())
@@ -469,23 +504,37 @@ mod tests {
         let mut conn = open(":memory:")?;
         let e = vec![0.5f32; EMBED_DIM];
 
-        let old_id = match insert_chunk(&mut conn, NewChunk {
-            source: "a.md", text: "old",
-            embedding: &e,
-            project: None, machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
-            embed_model: "test",
-        })? {
+        let old_id = match insert_chunk(
+            &mut conn,
+            NewChunk {
+                source: "a.md",
+                text: "old",
+                embedding: &e,
+                project: None,
+                machine: None,
+                scope: Scope::Agent,
+                kind: Kind::Note,
+                source_mtime: None,
+                embed_model: "test",
+            },
+        )? {
             InsertOutcome::Inserted { id } => id,
             _ => panic!("expected Inserted"),
         };
-        let new_id = match insert_chunk(&mut conn, NewChunk {
-            source: "b.md", text: "new",
-            embedding: &e,
-            project: None, machine: None,
-            scope: Scope::Agent, kind: Kind::Note, source_mtime: None,
-            embed_model: "test",
-        }) ? {
+        let new_id = match insert_chunk(
+            &mut conn,
+            NewChunk {
+                source: "b.md",
+                text: "new",
+                embedding: &e,
+                project: None,
+                machine: None,
+                scope: Scope::Agent,
+                kind: Kind::Note,
+                source_mtime: None,
+                embed_model: "test",
+            },
+        )? {
             InsertOutcome::Inserted { id } => id,
             _ => panic!("expected Inserted"),
         };

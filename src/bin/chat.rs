@@ -1,11 +1,8 @@
-use memory_tool::{
-    model::{CHAT_MODEL},
-    chat::{
-        wire::Message,
-        agent::agent_turn,
-    },
-};
 use anyhow::Result;
+use memory_tool::{
+    chat::{agent::agent_turn, wire::Message},
+    model::CHAT_MODEL,
+};
 use reqwest::Client;
 use std::io::{self, Write};
 
@@ -28,8 +25,12 @@ async fn main() -> Result<()> {
             break;
         }
         let input = buffer.trim();
-        if input.is_empty() { continue; }
-        if input == "exit" { break; }
+        if input.is_empty() {
+            continue;
+        }
+        if input == "exit" {
+            break;
+        }
 
         messages.push(Message {
             role: "user".to_string(),

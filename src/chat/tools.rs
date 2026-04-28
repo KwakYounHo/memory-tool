@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 const MEMORY_TOOL_URL: &str = "http://localhost:7080";
@@ -89,8 +89,8 @@ pub fn tool_defs() -> Vec<Value> {
 }
 
 pub async fn execute_tool(client: &Client, name: &str, args_json: &str) -> Result<String> {
-    let args: Value = serde_json::from_str(args_json)
-        .with_context(|| format!("parse arguments for {}", name))?;
+    let args: Value =
+        serde_json::from_str(args_json).with_context(|| format!("parse arguments for {}", name))?;
 
     match name {
         "search_memory" => http_proxy(client, "/search_memory", &args).await,
@@ -103,13 +103,20 @@ pub async fn execute_tool(client: &Client, name: &str, args_json: &str) -> Resul
 
 async fn http_proxy(client: &Client, path: &str, args: &Value) -> Result<String> {
     let url = format!("{}{}", MEMORY_TOOL_URL, path);
-    Ok(client.post(&url).json(args).send().await?
+    Ok(client
+        .post(&url)
+        .json(args)
+        .send()
+        .await?
         .error_for_status()?
-        .text().await?)
+        .text()
+        .await?)
 }
 
 fn exec_list(args: &Value) -> Result<String> {
-    let path = args.get("path").and_then(Value::as_str)
+    let path = args
+        .get("path")
+        .and_then(Value::as_str)
         .context("list_direectory requires 'path'")?;
     let p = Path::new(path);
     if !p.is_dir() {
@@ -119,22 +126,31 @@ fn exec_list(args: &Value) -> Result<String> {
     for entry in std::fs::read_dir(p)? {
         let entry = entry?;
         let meta = entry.metadata()?;
-        let kind = if meta.is_dir() { "dir" } else if meta.is_file() { "file" } else { "other" };
+        let kind = if meta.is_dir() {
+            "dir"
+        } else if meta.is_file() {
+            "file"
+        } else {
+            "other"
+        };
         entries.push(json!({
             "name": entry.file_name().to_string_lossy(),
             "type": kind,
             "size": meta.len()
         }));
-        if entries.len() >= MAX_LIST_ENTRISE { break; }
+        if entries.len() >= MAX_LIST_ENTRISE {
+            break;
+        }
     }
     Ok(serde_json::to_string(&json!({ "entries": entries }))?)
 }
 
 fn exec_read(args: &Value) -> Result<String> {
-    let path = args.get("path").and_then(Value::as_str)
+    let path = args
+        .get("path")
+        .and_then(Value::as_str)
         .context("read_file requires 'path'")?;
-    let bytes = std::fs::read(path)
-        .with_context(|| format!("read {}", path))?;
+    let bytes = std::fs::read(path).with_context(|| format!("read {}", path))?;
     let truncated = bytes.len() > MAX_FILE_BYTES;
     let content = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_FILE_BYTES)]).into_owned();
     Ok(serde_json::to_string(&json!({

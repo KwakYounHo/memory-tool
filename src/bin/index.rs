@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
+use memory_tool::model::EMBED_MODEL;
 use reqwest::Client;
 use std::path::PathBuf;
-use memory_tool::model::EMBED_MODEL;
 
 use memory_tool::{
-    indexer::{index_files, IndexOptions},
-    storage::{open, Kind, Scope},
+    indexer::{IndexOptions, index_files},
+    storage::{Kind, Scope, open},
 };
 
 #[tokio::main]

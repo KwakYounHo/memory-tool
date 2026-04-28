@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use text_splitter::{ChunkConfig, MarkdownSplitter};
 
-use crate::storage::{insert_chunk, InsertOutcome, Kind, NewChunk, Scope};
+use crate::storage::{InsertOutcome, Kind, NewChunk, Scope, insert_chunk};
 
 const MIN_CHUNK_CHARS: usize = 50;
 const CHUNK_SIZE: usize = 800;
@@ -27,7 +27,7 @@ pub struct IndexOptions<'a> {
     pub project: Option<&'a str>,
     pub machine: Option<&'a str>,
     pub scope: Scope,
-    pub kind: Kind
+    pub kind: Kind,
 }
 
 pub async fn index_files<P: AsRef<Path>>(
@@ -42,8 +42,8 @@ pub async fn index_files<P: AsRef<Path>>(
 
     for path in paths {
         let path = path.as_ref();
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("read {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         let mtime = file_mtime(path).ok();
         let source = path.display().to_string();
 
@@ -93,23 +93,29 @@ struct EmbedResponse {
     embeddings: Vec<Vec<f32>>,
 }
 
-pub async fn embed_batch(
-    client: &Client,
-    model: &str,
-    inputs: &[&str],
-) -> Result<Vec<Vec<f32>>> {
-    let req = EmbedRequest { model, input: inputs.to_vec() };
+pub async fn embed_batch(client: &Client, model: &str, inputs: &[&str]) -> Result<Vec<Vec<f32>>> {
+    let req = EmbedRequest {
+        model,
+        input: inputs.to_vec(),
+    };
     let resp = client
         .post(OLLAMA_EMBED_URL)
         .json(&req)
-        .send().await.context("HTTP send to Ollama failed")?
-        .error_for_status().context("Ollama returned error status")?
-        .json::<EmbedResponse>().await.context("decode Ollama response")?;
+        .send()
+        .await
+        .context("HTTP send to Ollama failed")?
+        .error_for_status()
+        .context("Ollama returned error status")?
+        .json::<EmbedResponse>()
+        .await
+        .context("decode Ollama response")?;
     Ok(resp.embeddings)
 }
 
 fn file_mtime(path: &Path) -> Result<i64> {
-    Ok(path.metadata()?.modified()?
-        .duration_since(UNIX_EPOCH)?.as_secs() as i64)
+    Ok(path
+        .metadata()?
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_secs() as i64)
 }
-

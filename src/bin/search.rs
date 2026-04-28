@@ -3,19 +3,16 @@ use reqwest::Client;
 use std::path::PathBuf;
 
 use memory_tool::{
-    search::search_memory,
-    storage::{open, SearchFilter},
     model::EMBED_MODEL,
+    search::search_memory,
+    storage::{SearchFilter, open},
 };
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        anyhow::bail!(
-            "usage: {} <db_path> <query> [top_k]",
-            args[0]
-        );
+        anyhow::bail!("usage: {} <db_path> <query> [top_k]", args[0]);
     }
     let db_path = PathBuf::from(&args[1]);
     let query = &args[2];
@@ -32,7 +29,7 @@ async fn main() -> Result<()> {
         top_k,
         &SearchFilter::default(),
     )
-        .await?;
+    .await?;
 
     if hits.is_empty() {
         println!("(no result)");
@@ -44,7 +41,13 @@ async fn main() -> Result<()> {
 
     for (i, hit) in hits.iter().enumerate() {
         let preview: String = hit.text.chars().take(120).collect();
-        println!("[{}] distance={:.3}\tscope={}\tkind={}", i + 1, hit.distance, hit.scope, hit.kind);
+        println!(
+            "[{}] distance={:.3}\tscope={}\tkind={}",
+            i + 1,
+            hit.distance,
+            hit.scope,
+            hit.kind
+        );
         println!("\tsource : {}", hit.source);
         if let Some(p) = &hit.project {
             println!("\tproject: {}", p);

@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use axum::{routing::{get, post}, Router};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use reqwest::Client;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -7,9 +10,9 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
 use memory_tool::{
-    api::{add_handler, health, search_handler, AppState},
-    storage::open,
+    api::{AppState, add_handler, health, search_handler},
     model::EMBED_MODEL,
+    storage::open,
 };
 
 #[tokio::main]
@@ -19,7 +22,8 @@ async fn main() -> Result<()> {
         anyhow::bail!("usage: {} <db_path> [bind_addr]", args[0]);
     }
     let db_path = PathBuf::from(&args[1]);
-    let bind_addr = args.get(2)
+    let bind_addr = args
+        .get(2)
         .map(String::from)
         .unwrap_or_else(|| "127.0.0.1:7080".to_string());
 
@@ -36,7 +40,8 @@ async fn main() -> Result<()> {
         .route("/add_memory", post(add_handler))
         .with_state(state);
 
-    let listener = TcpListener::bind(&bind_addr).await
+    let listener = TcpListener::bind(&bind_addr)
+        .await
         .with_context(|| format!("bind {}", bind_addr))?;
     println!("serving on http://{}", bind_addr);
     axum::serve(listener, app).await?;

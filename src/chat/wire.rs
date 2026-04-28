@@ -41,6 +41,5 @@ pub struct ChatResponse {
 
 #[derive(Deserialize)]
 pub struct Choice {
-   pub message: Message,
+    pub message: Message,
 }
-
