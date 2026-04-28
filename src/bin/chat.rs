@@ -91,24 +91,20 @@ fn tool_defs() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": "add_memory",
-                "description": "Persist a new memory chunk. The `text` is embedded as a vector and stored alongside its metadata for future semantic retrieval. Use when the user explicitly asks to save content, or when classifying/ingesting a file.",
+                "description": "Ingest a file into the user's memory database. The file referenced by `source` is read by the server, embedded as a vector, and stored alongside its metadata. Your role is to determine the metadata (scope, kind, project) — not to transcribe the file content. Call this after using read_file to inspect the content for classification.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "source":  {
                             "type": "string",
-                            "description": "Provenance identifier. For files, use a path or 'file://' URI. For chat-derived memories, use 'chat://<date>'. The `text` must actually originate from this source."
-                        },
-                        "text":    {
-                            "type": "string",
-                            "description": "The verbatim content to embed and store. MUST contain ONLY the data being saved — no narration, status announcements, or self-commentary. If transforming (summarizing, extracting), include only the transformation result."
+                            "description": "File URI for the memory's source content. Must start with 'file://' followed by an absolute path. The server reads this file directly from disk."
                         },
                         "scope":   { "type": "string", "enum": ["agent", "user"] },
                         "kind":    { "type": "string", "enum": ["rule", "feedback", "reflection", "reference", "memory", "note"] },
                         "project": { "type": "string" },
                         "machine": { "type": "string" }
                     },
-                    "required": ["source", "text"]
+                    "required": ["source"]
                 }
             }
         }),

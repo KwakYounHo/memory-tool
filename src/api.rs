@@ -10,15 +10,21 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
 
 use crate::indexer::embed_batch;
 use crate::search::embed_query;
 use crate::storage::{insert_chunk, InsertOutcome, Kind, NewChunk, Scope, SearchFilter, SearchHit};
 
-fn normalize_double_escapes(s: &str) -> String {
-    s.replace("\\n", "\n")
-        .replace("\\t", "\t")
-        .replace("\\r", "\r")
+fn parse_file_source(source: &str) -> Result<PathBuf, anyhow::Error> {
+    let path_str = source.strip_prefix("file://")
+        .ok_or_else(|| anyhow::anyhow!("source must be a file:// URI, got: {}", source))?;
+    let path = PathBuf::from(path_str);
+    if !path.is_absolute() {
+        anyhow::bail!("file:// path must be absolute: {}", path_str);
+    }
+    Ok(path)
 }
 
 #[derive(Clone)]
@@ -73,12 +79,10 @@ impl From<SearchHit> for HitDto {
 #[derive(Deserialize)]
 pub struct AddRequest {
     pub source: String,
-    pub text: String,
     pub project: Option<String>,
     pub machine: Option<String>,
     pub scope: Option<String>,          // "agent" | "user", 기본 "agent"
     pub kind: Option<String>,           // "rule"|"feedback"|"reflection"|"reference"|"memory"|"note"
-    pub source_mtime: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -137,16 +141,28 @@ pub async fn add_handler(
     State(state): State<AppState>,
     Json(req): Json<AddRequest>,
 ) -> Result<Json<AddResponse>, ApiError> {
-    // Normalize JSON-in-JSON double-escape patterns (small models sometimes
-    // emit "\\n" instead of "\n" in tool arguments, which then end up as
-    // literal "\n" in the stored text).
-    let text = normalize_double_escapes(&req.text);
+    // 1. verify file:// and extract path
+    let path = parse_file_source(&req.source)?;
 
+    // 2. Read file directly (Program)
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("read source file: {}", path.display()))?;
+    let text = String::from_utf8(bytes)
+        .context("source file is not valid UTF-8")?;
+
+    // 3. Automatic extract mtime
+    let source_mtime = path.metadata().ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+
+    // 4. Embedding
     let embeddings = embed_batch(&state.client, &state.embed_model, &[text.as_str()])
         .await?;
     let embedding = embeddings.into_iter().next()
         .context("empty embeddings from Ollama")?;
 
+    // 5. Parse metadata
     let scope = match req.scope.as_deref() {
         Some("user") => Scope::User,
         _ => Scope::Agent,
@@ -160,16 +176,19 @@ pub async fn add_handler(
         _ => Kind::Note,
     };
 
+    // 6. Save
     let mut conn = state.db.lock().await;
+    let canonical_source = path.display().to_string();
+
     let outcome = insert_chunk(&mut conn, NewChunk {
-        source: &req.source,
+        source: &canonical_source,
         text: &text,
         embedding: &embedding,
         project: req.project.as_deref(),
         machine: req.machine.as_deref(),
         scope,
         kind,
-        source_mtime: req.source_mtime,
+        source_mtime,
         embed_model: &state.embed_model
     })?;
 
