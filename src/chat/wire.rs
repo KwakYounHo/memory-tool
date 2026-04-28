@@ -43,3 +43,37 @@ pub struct ChatResponse {
 pub struct Choice {
     pub message: Message,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct StreamChunk {
+    pub choices: Vec<StreamChoice>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct StreamChoice {
+    pub delta: DeltaMessage,
+    pub finish_reason: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Default)]
+pub struct DeltaMessage {
+    pub role: Option<String>,
+    pub content: Option<String>,
+    pub reasoning: Option<String>,
+    pub tool_calls: Option<Vec<ToolCallDelta>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ToolCallDelta {
+    pub index: usize,
+    pub id: Option<String>,
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    pub function: Option<FunctionCallDelta>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FunctionCallDelta {
+    pub name: Option<String>,
+    pub arguments: Option<String>,
+}
