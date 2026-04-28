@@ -12,6 +12,7 @@ Memory classification:
 - kind=feedback: correction or guidance from the user
 - kind=reflection: informal insight or impression
 - kind=reference: pointer to an external resource (file path, URL)
+- kind=knowledge: reusable facts, concepts, procedures, domain knowledge, or stable project/technical knowledge
 - kind=memory: general memory
 - kind=note: other records
 - project: identifier only if the memory is tied to a specific project; otherwise omit

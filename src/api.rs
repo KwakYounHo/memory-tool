@@ -115,6 +115,7 @@ pub async fn search_handler(
             "feedback" => Some(Kind::Feedback),
             "reflection" => Some(Kind::Reflection),
             "reference" => Some(Kind::Reference),
+            "knowledge" => Some(Kind::Knowledge),
             "memory" => Some(Kind::Memory),
             "note" => Some(Kind::Note),
             _ => None,
@@ -172,6 +173,7 @@ pub async fn add_handler(
         Some("feedback") => Kind::Feedback,
         Some("reflection") => Kind::Reflection,
         Some("reference") => Kind::Reference,
+        Some("knowledge") => Kind::Knowledge,
         Some("memory") => Kind::Memory,
         _ => Kind::Note,
     };

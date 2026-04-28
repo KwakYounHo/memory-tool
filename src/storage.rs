@@ -89,6 +89,7 @@ pub enum Kind {
     Feedback,
     Reflection,
     Reference,
+    Knowledge,
     Memory,
     Note,
 }
@@ -100,6 +101,7 @@ impl Kind {
             Self::Feedback => "feedback",
             Self::Reflection => "reflection",
             Self::Reference => "reference",
+            Self::Knowledge => "knowledge",
             Self::Memory => "memory",
             Self::Note => "note",
         }

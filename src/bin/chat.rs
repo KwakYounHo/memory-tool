@@ -77,7 +77,7 @@ fn tool_defs() -> Vec<Value> {
                             "type": "object",
                             "properties": {
                                 "scope": { "type": "array", "items": { "type": "string", "enum": ["agent", "user"] } },
-                                "kind": { "type": "array", "items": { "type": "string", "enum": ["rule", "feedback", "reflection", "reference", "memory", "note"] } },
+                                "kind": { "type": "array", "items": { "type": "string", "enum": ["rule", "feedback", "reflection", "reference", "knowledge", "memory", "note"] } },
                                 "project": { "type": "string" },
                                 "machine": { "type": "string" },
                             }
@@ -100,7 +100,7 @@ fn tool_defs() -> Vec<Value> {
                             "description": "File URI for the memory's source content. Must start with 'file://' followed by an absolute path. The server reads this file directly from disk."
                         },
                         "scope":   { "type": "string", "enum": ["agent", "user"] },
-                        "kind":    { "type": "string", "enum": ["rule", "feedback", "reflection", "reference", "memory", "note"] },
+                        "kind":    { "type": "string", "enum": ["rule", "feedback", "reflection", "reference", "knowledge", "memory", "note"] },
                         "project": { "type": "string" },
                         "machine": { "type": "string" }
                     },
