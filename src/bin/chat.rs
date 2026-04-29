@@ -9,11 +9,12 @@ use std::io::{self, Write};
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = Client::new();
-    let mut messages: Vec<Message> = Vec::new();
     let stdin = io::stdin();
 
-    println!("Chat with {}. Type 'exit' or Ctrl-D to quit", CHAT_MODEL);
-    println!("Tools available: search_memory, add_memory, list_direectory, read_file\n");
+    println!(
+        "Chat with {}. Each prompt runs as a stateless turn. Type 'exit' or Ctrl-D to quit",
+        CHAT_MODEL
+    );
 
     loop {
         print!("> ");
@@ -32,12 +33,12 @@ async fn main() -> Result<()> {
             break;
         }
 
-        messages.push(Message {
+        let mut messages = vec![Message {
             role: "user".to_string(),
             content: Some(input.to_string()),
             tool_calls: None,
             tool_call_id: None,
-        });
+        }];
 
         if let Err(e) = agent_turn(&client, &mut messages).await {
             eprintln!("error: {:#}", e);
