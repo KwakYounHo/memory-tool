@@ -32,6 +32,13 @@ pub struct ChatRequest<'a> {
     pub messages: &'a [Message],
     pub tools: &'a [Value],
     pub stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<StreamOptions>,
+}
+
+#[derive(Serialize)]
+pub struct StreamOptions {
+    pub include_usage: bool,
 }
 
 #[derive(Deserialize)]
@@ -47,6 +54,7 @@ pub struct Choice {
 #[derive(Deserialize, Debug)]
 pub struct StreamChunk {
     pub choices: Vec<StreamChoice>,
+    pub usage: Option<Usage>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -76,4 +84,11 @@ pub struct ToolCallDelta {
 pub struct FunctionCallDelta {
     pub name: Option<String>,
     pub arguments: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub struct Usage {
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub total_tokens: usize,
 }

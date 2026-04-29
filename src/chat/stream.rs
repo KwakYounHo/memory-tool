@@ -3,10 +3,22 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use std::io::{self, Write};
 
-use crate::chat::wire::{ChatRequest, Message, StreamChunk};
+use crate::chat::{
+    usage::TokenUsage,
+    wire::{ChatRequest, Message, StreamChunk},
+};
 use crate::model::OLLAMA_CHAT_URL;
 
-pub async fn chat_once_streaming(client: &Client, req: &ChatRequest<'_>) -> Result<Message> {
+#[derive(Debug)]
+pub struct StreamingChatResult {
+    pub message: Message,
+    pub usage: Option<TokenUsage>,
+}
+
+pub async fn chat_once_streaming(
+    client: &Client,
+    req: &ChatRequest<'_>,
+) -> Result<StreamingChatResult> {
     let resp = client
         .post(OLLAMA_CHAT_URL)
         .json(req)
@@ -20,6 +32,7 @@ pub async fn chat_once_streaming(client: &Client, req: &ChatRequest<'_>) -> Resu
     let mut reasoning = String::new();
     let mut tool_calls: Vec<ToolCallBuilder> = Vec::new();
     let mut finish_reason: Option<String> = None;
+    let mut usage: Option<TokenUsage> = None;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk?;
@@ -40,24 +53,35 @@ pub async fn chat_once_streaming(client: &Client, req: &ChatRequest<'_>) -> Resu
                     .map(ToolCallBuilder::build)
                     .collect::<Result<Vec<_>>>()?;
 
-                return Ok(Message {
-                    role: "assistant".to_string(),
-                    content: if content.is_empty() {
-                        None
-                    } else {
-                        Some(content)
+                return Ok(StreamingChatResult {
+                    message: Message {
+                        role: "assistant".to_string(),
+                        content: if content.is_empty() {
+                            None
+                        } else {
+                            Some(content)
+                        },
+                        tool_calls: if built_tool_calls.is_empty() {
+                            None
+                        } else {
+                            Some(built_tool_calls)
+                        },
+                        tool_call_id: None,
                     },
-                    tool_calls: if built_tool_calls.is_empty() {
-                        None
-                    } else {
-                        Some(built_tool_calls)
-                    },
-                    tool_call_id: None,
+                    usage,
                 });
             }
 
             let parsed: StreamChunk = serde_json::from_str(data)
                 .with_context(|| format!("parse stream chunk: {}", data))?;
+
+            if let Some(u) = parsed.usage {
+                usage = Some(TokenUsage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                    total_tokens: u.total_tokens,
+                });
+            }
 
             let Some(choice) = parsed.choices.into_iter().next() else {
                 continue;

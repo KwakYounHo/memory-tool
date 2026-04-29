@@ -2,9 +2,10 @@ use crate::{
     chat::{
         stream::chat_once_streaming,
         tools::{execute_tool, tool_defs},
-        wire::{ChatRequest, Message},
+        usage::TurnUsage,
+        wire::{ChatRequest, Message, StreamOptions},
     },
-    model::CHAT_MODEL,
+    model::{CHAT_MODEL, NUM_CTX},
 };
 use anyhow::Result;
 use reqwest::Client;
@@ -12,6 +13,7 @@ use serde_json::json;
 
 pub async fn agent_turn(client: &Client, messages: &mut Vec<Message>) -> Result<()> {
     let tools = tool_defs();
+    let mut turn_usage = TurnUsage::default();
 
     loop {
         let req = ChatRequest {
@@ -19,9 +21,16 @@ pub async fn agent_turn(client: &Client, messages: &mut Vec<Message>) -> Result<
             messages,
             tools: &tools,
             stream: true,
+            stream_options: Some(StreamOptions {
+                include_usage: true,
+            }),
         };
 
-        let msg = chat_once_streaming(client, &req).await?;
+        let streaming_result = chat_once_streaming(client, &req).await?;
+        if let Some(usage) = streaming_result.usage {
+            turn_usage.record(usage);
+        }
+        let msg = streaming_result.message;
         messages.push(msg.clone());
 
         let calls = msg.tool_calls.unwrap_or_default();
@@ -29,6 +38,7 @@ pub async fn agent_turn(client: &Client, messages: &mut Vec<Message>) -> Result<
         println!();
 
         if calls.is_empty() {
+            println!("{}", turn_usage.format_summary(NUM_CTX));
             return Ok(());
         }
 
