@@ -1,13 +1,12 @@
-use anyhow::{Context, Result};
-use futures_util::StreamExt;
-use reqwest::Client;
-use std::io::{self, Write};
-
 use crate::chat::{
+    event::ChatEvent,
     usage::TokenUsage,
     wire::{ChatRequest, Message, StreamChunk},
 };
 use crate::model::OLLAMA_CHAT_URL;
+use anyhow::{Context, Result};
+use futures_util::StreamExt;
+use reqwest::Client;
 
 #[derive(Debug)]
 pub struct StreamingChatResult {
@@ -15,10 +14,14 @@ pub struct StreamingChatResult {
     pub usage: Option<TokenUsage>,
 }
 
-pub async fn chat_once_streaming(
+pub async fn chat_once_streaming<F>(
     client: &Client,
     req: &ChatRequest<'_>,
-) -> Result<StreamingChatResult> {
+    emit: &mut F,
+) -> Result<StreamingChatResult>
+where
+    F: FnMut(ChatEvent) -> Result<()>,
+{
     let resp = client
         .post(OLLAMA_CHAT_URL)
         .json(req)
@@ -89,18 +92,16 @@ pub async fn chat_once_streaming(
 
             if let Some(reasoning_delta) = choice.delta.reasoning {
                 reasoning.push_str(&reasoning_delta);
-                print!("{}", reasoning_delta);
-                io::stdout().flush()?;
+                emit(ChatEvent::ReasoningDelta(reasoning_delta))?;
             }
 
             if let Some(content_delta) = choice.delta.content {
                 if content.is_empty() && !content_delta.is_empty() {
-                    println!();
+                    emit(ChatEvent::Newline)?;
                 }
 
                 content.push_str(&content_delta);
-                print!("{}", content_delta);
-                io::stdout().flush()?;
+                emit(ChatEvent::ContentDelta(content_delta))?;
             }
 
             if let Some(deltas) = choice.delta.tool_calls {

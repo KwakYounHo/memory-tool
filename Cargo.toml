@@ -7,8 +7,10 @@ edition = "2024"
 anyhow = "1.0.102"
 axum = "0.8.9"
 bytemuck = "1.25.0"
+crossterm = "0.29.0"
 futures-util = "0.3.32"
 hex = "0.4.3"
+ratatui = "0.30.0"
 reqwest = { version = "0.13.2", features = ["json", "stream"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }

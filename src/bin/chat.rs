@@ -1,10 +1,38 @@
 use anyhow::Result;
 use memory_tool::{
-    chat::{agent::agent_turn, wire::Message},
+    chat::{agent::agent_turn, event::ChatEvent, wire::Message},
     model::CHAT_MODEL,
 };
 use reqwest::Client;
 use std::io::{self, Write};
+
+fn print_event(event: ChatEvent) -> Result<()> {
+    match event {
+        ChatEvent::ReasoningDelta(text) => {
+            print!("{text}");
+            io::stdout().flush()?;
+        }
+        ChatEvent::ContentDelta(text) => {
+            print!("{text}");
+            io::stdout().flush()?;
+        }
+        ChatEvent::ToolCall { name, arguments } => {
+            println!("\t→ {name}({arguments})");
+        }
+        ChatEvent::ToolResult { preview, truncated } => {
+            println!("\t← {}{}", preview, if truncated { "…" } else { "" });
+        }
+        ChatEvent::Usage(usage) => {
+            println!("{}", usage.format_summary(memory_tool::model::NUM_CTX));
+        }
+        ChatEvent::Newline => {
+            println!();
+        }
+        ChatEvent::Done => {}
+    }
+
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,7 +68,7 @@ async fn main() -> Result<()> {
             tool_call_id: None,
         }];
 
-        if let Err(e) = agent_turn(&client, &mut messages).await {
+        if let Err(e) = agent_turn(&client, &mut messages, print_event).await {
             eprintln!("error: {:#}", e);
         }
     }

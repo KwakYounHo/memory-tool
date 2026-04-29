@@ -4,14 +4,9 @@ use crate::chat::usage::TurnUsage;
 pub enum ChatEvent {
     ReasoningDelta(String),
     ContentDelta(String),
-    ToolCall {
-        name: String,
-        arguments: String,
-    },
-    ToolResult {
-        preview: String,
-        trucated: bool,
-    },
+    ToolCall { name: String, arguments: String },
+    ToolResult { preview: String, truncated: bool },
     Usage(TurnUsage),
+    Newline,
     Done,
 }

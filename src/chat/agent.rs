@@ -1,17 +1,21 @@
 use crate::{
     chat::{
+        event::ChatEvent,
         stream::chat_once_streaming,
         tools::{execute_tool, tool_defs},
         usage::TurnUsage,
         wire::{ChatRequest, Message, StreamOptions},
     },
-    model::{CHAT_MODEL, NUM_CTX},
+    model::CHAT_MODEL,
 };
 use anyhow::Result;
 use reqwest::Client;
 use serde_json::json;
 
-pub async fn agent_turn(client: &Client, messages: &mut Vec<Message>) -> Result<()> {
+pub async fn agent_turn<F>(client: &Client, messages: &mut Vec<Message>, mut emit: F) -> Result<()>
+where
+    F: FnMut(ChatEvent) -> Result<()>,
+{
     let tools = tool_defs();
     let mut turn_usage = TurnUsage::default();
 
@@ -26,7 +30,7 @@ pub async fn agent_turn(client: &Client, messages: &mut Vec<Message>) -> Result<
             }),
         };
 
-        let streaming_result = chat_once_streaming(client, &req).await?;
+        let streaming_result = chat_once_streaming(client, &req, &mut emit).await?;
         if let Some(usage) = streaming_result.usage {
             turn_usage.record(usage);
         }
@@ -35,26 +39,29 @@ pub async fn agent_turn(client: &Client, messages: &mut Vec<Message>) -> Result<
 
         let calls = msg.tool_calls.unwrap_or_default();
 
-        println!();
+        emit(ChatEvent::Newline)?;
 
         if calls.is_empty() {
-            println!("{}", turn_usage.format_summary(NUM_CTX));
+            emit(ChatEvent::Usage(turn_usage.clone()))?;
+            emit(ChatEvent::Done)?;
             return Ok(());
         }
 
         for call in calls {
-            println!("\t→ {}({})", call.function.name, call.function.arguments);
+            emit(ChatEvent::ToolCall {
+                name: call.function.name.clone(),
+                arguments: call.function.arguments.clone(),
+            })?;
             let result =
                 match execute_tool(client, &call.function.name, &call.function.arguments).await {
                     Ok(s) => s,
                     Err(e) => serde_json::to_string(&json!({ "error": e.to_string() })).unwrap(),
                 };
+
             let preview: String = result.chars().take(200).collect();
-            println!(
-                "\t← {}{}",
-                preview,
-                if result.len() > 200 { "…" } else { "" }
-            );
+            let truncated = result.chars().count() > 200;
+
+            emit(ChatEvent::ToolResult { preview, truncated })?;
 
             messages.push(Message {
                 role: "tool".to_string(),
