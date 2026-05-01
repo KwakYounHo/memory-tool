@@ -1,32 +1,31 @@
-use anyhow::{Context, Result};
-use reqwest::Client;
-use std::path::PathBuf;
-
-use memory_tool::{
+use crate::{
+    cli::context::CliContext,
     model::EMBED_MODEL,
     search::search_memory,
     storage::{SearchFilter, open},
 };
+use anyhow::{Context, Result};
+use clap::Parser;
+use reqwest::Client;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 3 {
-        anyhow::bail!("usage: {} <db_path> <query> [top_k]", args[0]);
-    }
-    let db_path = PathBuf::from(&args[1]);
-    let query = &args[2];
-    let top_k: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5);
+#[derive(Debug, Parser)]
+pub struct SearchArgs {
+    pub query: String,
 
-    let conn = open(&db_path).context("open db")?;
+    #[arg(long, default_value_t = 5)]
+    pub top_k: usize,
+}
+
+pub async fn run(context: &CliContext, args: SearchArgs) -> Result<()> {
+    let conn = open(&context.db_path).context("open db")?;
     let client = Client::new();
 
     let hits = search_memory(
         &conn,
         &client,
         EMBED_MODEL,
-        query,
-        top_k,
+        &args.query,
+        args.top_k,
         &SearchFilter::default(),
     )
     .await?;
@@ -36,7 +35,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    println!("query: {}", query);
+    println!("query: {}", args.query);
     println!("found {} hit(s):\n", hits.len());
 
     for (i, hit) in hits.iter().enumerate() {

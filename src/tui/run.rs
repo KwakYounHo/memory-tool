@@ -1,12 +1,10 @@
+use super::app::App;
+use crate::chat::{agent::agent_turn, event::ChatEvent, wire::Message};
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-};
-use memory_tool::{
-    chat::{agent::agent_turn, event::ChatEvent, wire::Message},
-    model::NUM_CTX,
 };
 use ratatui::{
     Terminal,
@@ -18,69 +16,7 @@ use reqwest::Client;
 use std::{io, time::Duration};
 use tokio::sync::mpsc;
 
-#[derive(Default)]
-struct App {
-    input: String,
-    lines: Vec<String>,
-    streaming_line: String,
-    in_flight: bool,
-}
-
-impl App {
-    fn submit(&mut self) -> Option<String> {
-        let input = self.input.trim().to_string();
-        self.input.clear();
-
-        if input.is_empty() {
-            return None;
-        }
-
-        if input == "/exit" {
-            return Some(input);
-        }
-
-        self.lines.push(format!("> {input}"));
-        Some(input)
-    }
-
-    fn apply_event(&mut self, event: ChatEvent) {
-        match event {
-            ChatEvent::ReasoningDelta(text) | ChatEvent::ContentDelta(text) => {
-                if self.streaming_line.is_empty() {
-                    self.lines.push(String::new());
-                }
-
-                self.streaming_line.push_str(&text);
-
-                if let Some(last) = self.lines.last_mut() {
-                    *last = self.streaming_line.clone();
-                }
-            }
-            ChatEvent::ToolCall { name, arguments } => {
-                self.lines.push(format!("→ {name}({arguments})"));
-            }
-            ChatEvent::ToolResult { preview, truncated } => {
-                self.lines
-                    .push(format!("← {}{}", preview, if truncated { "…" } else { "" }));
-            }
-            ChatEvent::Usage(usage) => {
-                self.lines.push(usage.format_summary(NUM_CTX));
-            }
-            ChatEvent::Newline => {
-                if !self.streaming_line.is_empty() {
-                    self.streaming_line.clear();
-                }
-            }
-            ChatEvent::Done => {
-                self.in_flight = false;
-                self.streaming_line.clear();
-            }
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
+pub async fn run() -> Result<()> {
     enable_raw_mode()?;
 
     let mut stdout = io::stdout();
@@ -89,7 +25,7 @@ async fn main() -> Result<()> {
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&mut terminal).await;
+    let result = run_event_loop(&mut terminal).await;
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -98,7 +34,7 @@ async fn main() -> Result<()> {
     result
 }
 
-async fn run(
+async fn run_event_loop(
     terminal: &mut Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>,
 ) -> Result<()> {
     let client = Client::new();

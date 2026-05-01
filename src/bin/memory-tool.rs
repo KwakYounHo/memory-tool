@@ -1,60 +1,24 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use clap::Parser;
+use memory_tool::cli::{Cli, Command, context::CliContext};
 
-#[derive(Debug, Parser)]
-#[command(name = "memory-tool")]
-#[command(version, about = "Personal memory system")]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Debug, Subcommand)]
-enum Command {
-    Serve(ServeArgs),
-    Search(SearchArgs),
-    Index(IndexArgs),
-    Tui,
-}
-
-#[derive(Debug, Parser)]
-struct ServeArgs {
-    #[arg(long, default_value = "127.0.0.1:7080")]
-    bind: String,
-}
-
-#[derive(Debug, Parser)]
-struct SearchArgs {
-    query: String,
-
-    #[arg(long, default_value_t = 5)]
-    top_k: usize,
-}
-
-#[derive(Debug, Parser)]
-struct IndexArgs {
-    files: Vec<PathBuf>,
-}
-
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let context = CliContext::load()?;
 
     match cli.command {
         Command::Serve(args) => {
-            println!("serve placeholder: bind={}", args.bind);
+            memory_tool::cli::serve::run(&context, args).await?;
         }
         Command::Search(args) => {
-            println!(
-                "search placeholder: query={}, top_k={}",
-                args.query, args.top_k
-            );
+            memory_tool::cli::search::run(&context, args).await?;
         }
         Command::Index(args) => {
-            println!("index placeholder: files={:?}", args.files);
+            memory_tool::cli::index::run(&context, args).await?;
         }
         Command::Tui => {
-            println!("tui placeholder");
+            memory_tool::cli::tui::run().await?;
         }
     }
     Ok(())
